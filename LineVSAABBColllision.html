@@ -1,0 +1,181 @@
+<html>
+
+<head>
+
+
+</head>
+
+<body>
+
+
+  <canvas id="Canvas" width="300" height="300">
+  </canvas>
+
+  <script>
+    function Vec2(x, y) {
+      this.x = x;
+      this.y = y;
+
+      this.sub = function (v) {
+        return new Vec2(this.x - v.x, this.y - v.y);
+      };
+
+      this.add = function (v) {
+        return new Vec2(this.x + v.x, this.y + v.y);
+      };
+
+      this.mul = function (f) {
+        return new Vec2(this.x * f, this.y * f);
+      };
+
+      this.mag = function () {
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+      };
+
+      this.normalized = function () {
+        var len = Math.sqrt(this.x * this.x + this.y * this.y);
+        return new Vec2(this.x / len, this.y / len);
+      };
+    };
+
+    function ClipLine(d, box, v0, v1) // d 0 if x 1 if y
+    {
+
+      var fDimLow, fDimHigh;
+
+      if (d == 0) {
+        var deltaX = (v1.x - v0.x);
+        fDimLow = (box.x - box.w / 2 - v0.x) / deltaX;
+        fDimHigh = (box.x + box.w / 2 - v0.x) / deltaX;
+      } else {
+        var deltaY = (v1.y - v0.y);
+        fDimLow = (box.y - box.h / 2 - v0.y) / deltaY;
+        fDimHigh = (box.y + box.h / 2 - v0.y) / deltaY;
+      }
+
+
+      if (fDimHigh < fDimLow) {
+        var tmp = fDimLow;
+        fDimLow = fDimHigh;
+        fDimHigh = tmp;
+      }
+
+      if (fDimHigh < fLow)
+        return false
+      if (fDimLow > fHigh)
+        return false
+
+      fLow = Math.max(fDimLow, fLow);
+      fHigh = Math.min(fDimHigh, fHigh);
+
+      if (fLow > fHigh)
+        return false;
+      return true;
+    }
+
+    function AABBvsLine(a, v0, v1) {
+      fLow = 0;
+      fHigh = 1;
+
+      if (!ClipLine(0, a, v0, v1)) // check clip across x axis
+        return false;
+
+      if (!ClipLine(1, a, v0, v1)) // check clip across y axis
+        return false;
+
+      var b = v1.sub(v0);
+      var vecIntersection = v0.add(b.mul(fLow));
+
+      fraction = Math.min(fraction, fLow);
+
+      return true;
+    }
+
+    function AABBvsPoint(a, b) // AABB a, Point b
+    {
+      // Exit with no intersection if found separated along an axis
+      if (a.x + a.w / 2 < b.x || a.x - a.w / 2 > b.x) return false;
+      if (a.y + a.h / 2 < b.y || a.y - a.h / 2 > b.y) return false;
+
+      return true;
+    }
+
+    function Box(x, y, w, h) {
+      this.x = x;
+      this.y = y;
+      this.w = w;
+      this.h = h;
+
+      this.radius = 100;
+
+      this.draw = function () {
+        ctx.fillRect(this.x - this.w / 2, this.y - this.h / 2, this.w, this.h);
+      };
+
+    };
+
+    document.onmousemove = handleMouseMove;
+
+    function handleMouseMove(event) {
+
+      if (event.which == 1) {
+
+      }
+      // Use event.pageX / event.pageY here
+      mouseX = event.pageX;
+      mouseY = event.pageY;
+    }
+
+    var mouseX = 0;
+    var mouseY = 0;
+
+    setInterval(tick, 16);
+    var c = document.getElementById("Canvas");
+    var ctx = c.getContext("2d");
+
+    var boxes = [];
+
+    var box1 = new Box(200, 200, 100, 100);
+    var box2 = new Box(500, 300, 100, 100);
+
+    boxes.push(box1);
+    boxes.push(box2);
+
+    function tick() {
+      ctx.canvas.width = window.innerWidth;
+      ctx.canvas.height = window.innerHeight;
+
+      for (var i = 0; i < boxes.length; i++) {
+        boxes[i].draw();
+      }
+
+      var mouseVec = new Vec2(mouseX, mouseY);
+      fraction = 1.0;
+
+      // test line from Vec2(0, 0) to mouseVec on box1
+      // if collision occurs mouseVec * fraction is the collision point on the box
+      if (AABBvsLine(box1, new Vec2(0, 0), mouseVec)) {}
+
+
+      if (AABBvsLine(box2, new Vec2(0, 0), mouseVec)) {}
+
+      if (fraction < 1.0) { // collision detected
+        ctx.strokeStyle = "#FF0000";
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(mouseVec.x * fraction, mouseVec.y * fraction);
+
+        ctx.stroke();
+      } else { // no collision detected
+        ctx.strokeStyle = "#000000";
+        ctx.beginPath();
+        ctx.moveTo(0, 0);
+        ctx.lineTo(mouseVec.x, mouseVec.y);
+        ctx.stroke();
+      }
+
+    }
+  </script>
+</body>
+
+</html>

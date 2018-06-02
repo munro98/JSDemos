@@ -1,0 +1,431 @@
+<html>
+<head>
+</head>
+<body>
+  <canvas id="Canvas" width="640" height="480">
+  </canvas>
+  <style>
+    html,
+    body {
+      width: 100%;
+      height: 100%;
+      margin: 0px;
+    }
+  </style>
+
+  <script>
+    let levelData = "vertex	0	0 6 28\n" +
+      "vertex	2	1 17.5\n" +
+      "vertex	5	4 6 18 21\n" +
+      "vertex	6.5	9 11 13 13.5 17.5\n" +
+      "vertex	7	5 7 8 9 11 13 13.5 15 17 19 21\n" +
+      "vertex	7.5	4 6\n" +
+      "vertex	10.5	4 6\n" +
+      "vertex	11	5 7 8 9 11 13 13.5 15 17 19 21\n" +
+      "vertex	11.5	9 11 13 13.5 17.5\n" +
+      "vertex	13	4 6 18 21\n" +
+      "vertex	16	1 17.5\n" +
+      "vertex	18	0 6 28\n" +
+      "sector	0 20	 3 14 29 49             -1 1 11 22 \n" +
+      "sector	0 20	 17 15 14 3 9           -1 12 11 0 21 \n" +
+      "sector	0 20	 41 42 43 44 50 49 40   -1 20 -1 3 -1 -1 22 \n" +
+      "sector	0 14	 12 13 44 43 35 20      -1 21 -1 2 -1 4 \n" +
+      "sector	0 12	 16 20 35 31            -1 -1 3 -1 \n" +
+      "sector	16 28	 24 8 2 53 48 39        18 -1 7 -1 6 -1 \n" +
+      "sector	16 28	 53 52 46 47 48         5 -1 8 10 -1 \n" +
+      "sector	16 28	 1 2 8 7 6              23 -1 5 -1 10 \n" +
+      "sector	16 36	 46 52 51 45            -1 6 -1 24 \n" +
+      "sector	16 36	 25 26 28 27            24 -1 10 -1 \n" +
+      "sector	16 26	 6 7 47 46 28 26        -1 7 -1 6 -1 9 \n" +
+      "sector	2 20	 14 15 30 29            0 1 12 22 \n" +
+      "sector	4 20	 15 17 32 30            11 1 13 22 \n" +
+      "sector	6 20	 17 18 33 32            12 -1 14 -1 \n" +
+      "sector	8 20	 18 19 34 33            13 19 15 20 \n" +
+      "sector	10 24	 19 21 36 34            14 -1 16 -1 \n" +
+      "sector	12 24	 21 22 37 36            15 -1 17 -1 \n" +
+      "sector	14 28	 22 23 38 37            16 -1 18 -1 \n" +
+      "sector	16 28	 23 24 39 38            17 -1 5 -1 \n" +
+      "sector	8 14	 10 11 19 18            -1 21 -1 14 \n" +
+      "sector	8 14	 33 34 42 41            -1 14 -1 2 \n" +
+      "sector	0 20	 4 13 12 11 10 9 3      -1 -1 3 -1 19 -1 1 \n" +
+      "sector	0 20	 29 30 32 40 49         0 11 12 -1 2 \n" +
+      "sector	16 36	 1 6 5 0                -1 7 -1 24 \n" +
+      "sector	16 36	 0 5 25 27 45 51        -1 23 -1 9 -1 8 \n" +
+      "pl	2 6	0	0\n";//this line the parser doesn't use yet
+
+    class Sector {
+      constructor(floor, ceil) {
+        this.floor = floor; // height of the floor
+        this.ceil = ceil; // height of the ceil
+
+        this.vertex = new Array(); // Array of xy pairs
+        this.neighbors = new Array(); // Array of neighbors sector indexes
+      }
+    };
+
+    class Player {
+      constructor() {
+        this.pos = {
+          x: 2,
+          y: 6,
+          z: 6
+        };
+        this.angle = 0;
+        this.yaw = 0;
+        this.sector = 0;
+      }
+
+    };
+
+    let c = document.getElementById("Canvas");
+    let ctx = c.getContext("2d");
+    let keyCodeSet = new Set();
+
+    let Width = 800;
+    let Height = 500;
+
+    let HalfWidth = Width / 2;
+    let HalfHeight = Height / 2;
+
+    let hfov = (0.85 * Height);
+    let vfov = (0.2 * Height);
+
+    let imageData = ctx.createImageData(Width, Height);
+
+    let pl = new Player();
+    let sectors = new Array();
+
+    function parseLevelData() {
+      let verts = new Array();
+      let lines = levelData.split('\n');
+      for (let i = 0; i < lines.length; i++) {
+        let line = lines[i];
+        if (line.startsWith("#")) {
+          continue;
+        }
+
+        if (line.startsWith("vertex")) {
+          let lineSplit = line.split(/[\s,;\t\n]+/);
+          if (lineSplit[lineSplit.length - 1].length == 0) {
+            lineSplit.pop();
+          }
+          let y = parseFloat(lineSplit[1]);
+          let j = 2;
+          for (; j < lineSplit.length; j++) {
+            verts.push({
+              x: parseFloat(lineSplit[j]),
+              y: y
+            });
+          }
+        } else if (line.startsWith("sector")) {
+          let lineSplit = line.split(/[\s,;\t\n]+/);
+          if (lineSplit[lineSplit.length - 1].length == 0) {
+            lineSplit.pop();
+          }
+          let floor = parseInt(lineSplit[1]);
+          let ceil = parseInt(lineSplit[2]);
+          let indexes = new Array();
+          for (let j = 3; j < lineSplit.length; j++) {
+            indexes.push(parseFloat(lineSplit[j]));
+          }
+
+          let vertexIndexes = indexes.slice(0, indexes.length / 2);
+          let neighbourIndexes = indexes.slice(indexes.length / 2, indexes.length);
+          let s = new Sector(floor, ceil);
+
+          for (let k = 0; k < vertexIndexes.length; k++) {
+            s.vertex[k + 1] = {
+              x: verts[vertexIndexes[k]].x,
+              y: verts[vertexIndexes[k]].y,
+              xindex: vertexIndexes[k],
+            };
+          };
+          s.vertex[0] = {
+            x: verts[vertexIndexes[vertexIndexes.length - 1]].x,
+            y: verts[vertexIndexes[vertexIndexes.length - 1]].y,
+            xindex: vertexIndexes[vertexIndexes.length - 1],
+          };
+
+          s.neighbors = neighbourIndexes;
+          sectors.push(s);
+        }
+      }
+
+
+    };
+    parseLevelData();
+
+    function vxs(x0, y0, x1, y1) {
+      return ((x0) * (y1) - (x1) * (y0));
+    };
+
+    function intersect(x1, y1, x2, y2, x3, y3, x4, y4) {
+      let x = vxs(x1, y1, x2, y2);
+      let y = vxs(x3, y3, x4, y4);
+      let det = vxs(x1 - x2, y1 - y2, x3 - x4, y3 - y4);
+      x = vxs(x, x1 - x2, y, x3 - x4) / det;
+      y = vxs(x, y1 - y2, y, y3 - y4) / det;
+      return {
+        x: x,
+        y: y
+      };
+    };
+
+    function Overlap(a0, a1, b0, b1) {
+      return (Math.min(a0, a1) <= Math.max(b0, b1) && Math.min(b0, b1) <= Math.max(a0, a1));
+    };
+
+    function IntersectBox(x0, y0, x1, y1, x2, y2, x3, y3) {
+      return (Overlap(x0, x1, x2, x3) && Overlap(y0, y1, y2, y3));
+    };
+
+    function PointSide(px, py, x0, y0, x1, y1) {
+      return vxs((x1) - (x0), (y1) - (y0), (px) - (x0), (py) - (y0));
+    };
+
+    function Yaw(y, z) {
+      return (y + z * 0)
+    };
+
+    function clamp(a, min, max) {
+      return Math.min(Math.max(a, min), max);
+    }
+
+    function setPixel(x, y, r, g, b, a) {
+      index = (x + y * imageData.width) * 4;
+      imageData.data[index + 0] = r;
+      imageData.data[index + 1] = g;
+      imageData.data[index + 2] = b;
+      imageData.data[index + 3] = a;
+    }
+    //create vertical line at x from y1 to y2
+    function vline(x, y1, y2, r, g, b) {
+      y1 = clamp(y1, 0, Height - 1);
+      y2 = clamp(y2, 0, Height - 1);
+      if (y2 > y1) {
+        index = (x + y1 * imageData.width) * 4;
+        for (let y = y1, p = 0; y < y2; ++y, p += Width * 4) {
+          setPixel(x, y, r, g, b, 255);
+        }
+      }
+    }
+    //some colours for rendering walls
+    let cols = [
+      {r: 0, g: 150,b: 0}, 
+      {r: 0, g: 250,b: 250}, 
+      {r: 250,g: 250,b: 0}, 
+      {r: 250,g: 0,b: 250}, 
+      {r: 0,g: 250,b: 0}, 
+      {r: 0,g: 0,b: 150}
+    ];
+
+    setInterval(tick, 32);
+    function tick() {
+      // resizing also clears the screen
+      ctx.canvas.width = window.innerWidth;
+      ctx.canvas.height = window.innerHeight;
+
+      let dx = 0, dy = 0;
+      //turn camera Q and E
+      if (keyCodeSet.has(81)) {
+        pl.angle -= 1.0 * 0.08;
+      }
+      if (keyCodeSet.has(69)) {
+        pl.angle += 1.0 * 0.08;
+      }
+      //move around side to side A and D
+      if (keyCodeSet.has(68)) {
+        dx += Math.cos(pl.angle + (90 * 3.14 / 180)) * 0.02 * 10;
+        dy += Math.sin(pl.angle + (90 * 3.14 / 180)) * 0.02 * 10;
+      }
+      if (keyCodeSet.has(65)) {
+        dx -= Math.cos(pl.angle + (90 * 3.14 / 180)) * 0.02 * 10;
+        dy -= Math.sin(pl.angle + (90 * 3.14 / 180)) * 0.02 * 10;
+      }
+      //move back and forward W and S
+      if (keyCodeSet.has(87)) {
+        dx += Math.cos(pl.angle) * 0.02 * 10;
+        dy += Math.sin(pl.angle) * 0.02 * 10;
+      }
+      if (keyCodeSet.has(83)) {
+        dx += -Math.cos(pl.angle) * 0.02 * 10;
+        dy += -Math.sin(pl.angle) * 0.02 * 10;
+      }
+      // move player between sectors
+      let psect = sectors[pl.sector];
+      let vert = psect.vertex;
+
+      for (let s = 0; s < vert.length - 1; s++) {
+        if (psect.neighbors[s] >= 0 &&
+          IntersectBox(pl.pos.x, pl.pos.y, pl.pos.x + dx, pl.pos.y + dy, vert[s + 0].x, vert[s + 0].y, vert[s + 1].x, vert[s + 1].y) &&
+          PointSide(pl.pos.x + dx, pl.pos.y + dy, vert[s + 0].x, vert[s + 0].y, vert[s + 1].x, vert[s + 1].y) < 0) {
+          pl.sector = psect.neighbors[s];
+          pl.pos.z = sectors[pl.sector].floor + 6;
+          break;
+        }
+      }
+      //update player position
+      pl.pos.x += dx;
+      pl.pos.y += dy;
+
+      let renderedCount = 0;
+      let q = new Array(); // a queue of portals to be rendered
+
+      q.push({
+        s: pl.sector, //push current sector for rendering
+        sx1: 0, //the "window" that we are allowed to render into
+        sx2: Width - 1,
+      });
+
+      let ytop = new Array(Width).fill(0),
+        ybottom = new Array(Width).fill(Height - 1);
+
+      for (y = 0; y < imageData.height; y++) {
+        for (x = 0; x < imageData.width; x++) {
+          setPixel(x, y, 100, 100, 100, 255);
+        }
+      }
+
+      while (q.length != 0 && renderedCount < 64) {
+        renderedCount++;
+        //select the sector to draw
+        let now = q.splice(0, 1)[0];
+        let sect = sectors[now.s];
+
+        // Iterate each pairs of walls and draw them
+        for (let s = 0; s < sect.vertex.length - 1; s++) {
+          //translate wall relative to player
+          let vx1 = sect.vertex[s].x - pl.pos.x;
+          let vy1 = sect.vertex[s].y - pl.pos.y;
+
+          let vx2 = sect.vertex[s + 1].x - pl.pos.x;
+          let vy2 = sect.vertex[s + 1].y - pl.pos.y;
+
+          // rotate wall around the player
+          let tz1 = vx1 * Math.cos(pl.angle) + vy1 * Math.sin(pl.angle);
+          let tz2 = vx2 * Math.cos(pl.angle) + vy2 * Math.sin(pl.angle);
+
+          let tx1 = vx1 * Math.sin(pl.angle) - vy1 * Math.cos(pl.angle);
+          let tx2 = vx2 * Math.sin(pl.angle) - vy2 * Math.cos(pl.angle);
+          if (tz1 <= 0 && tz2 <= 0) continue;
+
+          if (tz1 <= 0 || tz2 <= 0) {
+            let nearz = 1e-4, farz = 5, nearside = 1e-5, farside = 20;
+            // Find an intersection between the wall and the approximate edges of pl's view
+            let i1 = intersect(tx1, tz1, tx2, tz2, -0.001, 0.001, -20, 5);
+            let i2 = intersect(tx1, tz1, tx2, tz2, 0.001, 0.001, 20, 5);
+
+            if (tz1 < nearz) {
+              if (i1.y > 0) {
+                tx1 = i1.x;
+                tz1 = i1.y;
+              } else {
+                tx1 = i2.x;
+                tz1 = i2.y;
+              }
+            }
+            if (tz2 < nearz) {
+              if (i1.y > 0) {
+                tx2 = i1.x;
+                tz2 = i1.y;
+              } else {
+                tx2 = i2.x;
+                tz2 = i2.y;
+              }
+            }
+          }
+          /* Do perspective transformation */
+          let xscale1 = hfov / tz1,
+            yscale1 = vfov / tz1;
+          let x1 = Width / 2 - (tx1 * xscale1);
+          let xscale2 = hfov / tz2,
+            yscale2 = vfov / tz2;
+          let x2 = Width / 2 - (tx2 * xscale2);
+
+          /* Acquire the floor and ceiling heights, relative to pos the pl's view is */
+          let yceil = sect.ceil - pl.pos.z;
+          let yfloor = sect.floor - pl.pos.z;
+          /* Check the edge type. neighbor=-1 means wall, other=boundary between two sectors. */
+          let neighbor = sect.neighbors[s];
+          let nyceil = 0,
+            nyfloor = 0;
+          if (neighbor >= 0) // Is another sector showing through this portal?
+          {
+            nyceil = sectors[neighbor].ceil - pl.pos.z;
+            nyfloor = sectors[neighbor].floor - pl.pos.z;
+          }
+
+          let y1a = Height / 2 - (Yaw(yceil, tz1) * yscale1),
+            y1b = Height / 2 - (Yaw(yfloor, tz1) * yscale1);
+          let y2a = Height / 2 - (Yaw(yceil, tz2) * yscale2),
+            y2b = Height / 2 - (Yaw(yfloor, tz2) * yscale2);
+
+          /* The same for the neighboring sector */
+          let ny1a = Height / 2 - (Yaw(nyceil, tz1) * yscale1),
+            ny1b = Height / 2 - (Yaw(nyfloor, tz1) * yscale1);
+          let ny2a = Height / 2 - (Yaw(nyceil, tz2) * yscale2),
+            ny2b = Height / 2 - (Yaw(nyfloor, tz2) * yscale2);
+
+          if (x1 >= x2 || x2 < now.sx1 || x1 > now.sx2) continue; // Only render if it's visible
+          if (x2 < 0 || x1 > Width) continue; // Only render if it's visible
+          //select colour to render wall
+          let col = cols[s % cols.length];
+
+          let beginx = Math.floor(Math.max(x1, now.sx1)),
+            endx = Math.floor(Math.min(x2, now.sx2));
+
+          for (let x = beginx; x <= endx; ++x) {
+            /* Acquire the Y coordinates for our ceiling & floor for this X coordinate. Clamp them. */
+            let ya = (x - x1) * (y2a - y1a) / (x2 - x1) + y1a,
+              cya = clamp(ya, ytop[x], ybottom[x]); // top
+            let yb = (x - x1) * (y2b - y1b) / (x2 - x1) + y1b,
+              cyb = clamp(yb, ytop[x], ybottom[x]); // bottom
+
+            if (neighbor >= 0) {
+              /* Same for _their_ floor and ceiling */
+              let nya = (x - x1) * (ny2a - ny1a) / (x2 - x1) + ny1a,
+                cnya = clamp(nya, ytop[x], ybottom[x]);
+              let nyb = (x - x1) * (ny2b - ny1b) / (x2 - x1) + ny1b,
+                cnyb = clamp(nyb, ytop[x], ybottom[x]);
+              //bottom potral wall
+              if (nyfloor > yfloor)
+                vline(x, Math.floor(nyb), Math.floor(cyb), 255, 255, 0);
+              //top portal wall
+              if (nyceil < yceil)
+                vline(x, Math.floor(cya), Math.floor(nya), 255, 0, 0);
+
+              ytop[x] = Math.floor(clamp(Math.max(cya, cnya), ytop[x], Height - 1)); // Shrink the remaining window below these ceilings
+              ybottom[x] = Math.floor(clamp(Math.min(cyb, cnyb), 0, ybottom[x])); // Shrink the remaining window above these floors
+            } else { // render regular wall
+              vline(x, Math.floor(cya), Math.floor(cyb), col.r, col.g, col.b);
+            }
+          }
+          //uncomment below to render single sector
+          //continue;
+
+          if (neighbor >= 0 && endx >= beginx) {
+            q.push({
+              s: neighbor,
+              sx1: beginx,
+              sx2: endx
+            });
+          }
+
+        }
+      }
+
+      ctx.putImageData(imageData, 0, 0, 0, 0, imageData.width, imageData.height);
+    }
+
+    document.documentElement.addEventListener("keydown", onKeyDown, false);
+    function onKeyDown(event) {
+      keyCodeSet.add(event.keyCode);
+    }
+    document.documentElement.addEventListener("keyup", onKeyUp, false);
+
+    function onKeyUp(event) {
+      keyCodeSet.delete(event.keyCode);
+    }
+  </script>
+</body>
+</html>

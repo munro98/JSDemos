@@ -1,0 +1,412 @@
+<html>
+  <head> 
+
+
+  </head>
+  <body>
+<div id="buttons">
+
+</div>
+
+  <canvas id="Canvas" 
+          width="300" height="300">
+  </canvas>
+
+    <style>
+    html, body {
+      width:  100%;
+      height: 100%;
+      margin: 0px;
+    }
+    
+    </style>
+    <script>
+    var mouseX = 0;
+    var mouseY = 0;
+
+    var quadMaxElements = 1;
+    var quadMaxDepth = 32;
+
+    function QuadTree (x, y, w, depth){
+      this.x = x;
+      this.y = y;
+      this.w = w; // width and height of this quadrant
+      this.depth = depth;
+
+      this.q0 = null;
+      this.q1 = null;
+      this.q2 = null;
+      this.q3 = null;
+
+      this.isLeaf = false; // leaf nodes do not contain children nodes
+      this.boxes = new Array(); // our box elements, any node at any depth may contain box elements
+
+      this.selected = false; // whether the test box intersects this quadrant
+
+      // attemps to add a new box to the tree
+      this.addPoint = function (box){
+        
+        // The box isn't completely contained in ours and doesn't fit
+        if (box.x < this.x || box.x + box.w > this.x + this.w || box.y < this.y || box.y + box.h > this.y + this.w) {
+          //console.log("not fit ")
+          return false;
+        }
+        //console.log("fits ")
+
+        if (this.boxes.length == 0 && this.isLeaf == false && this.q0 == null) { // This node is empty so make it a leaf
+          this.boxes.push(box);
+          this.isLeaf = true;
+
+          return true;
+
+        } else if (this.isLeaf) { // this is a leaf already so check if need subdivide
+
+          // If we can subdivide then subdivide ie the leaf is full and we are below maximum depth
+          if (this.boxes.length >= quadMaxElements && this.depth < quadMaxDepth) {//
+
+            this.q0 = new QuadTree(this.x, this.y, this.w / 2, this.depth + 1);
+            this.q1 = new QuadTree(this.x + this.w / 2, this.y, this.w / 2, this.depth + 1);
+            this.q2 = new QuadTree(this.x, this.y + this.w / 2, this.w / 2, this.depth + 1);
+            this.q3 = new QuadTree(this.x + this.w / 2, this.y + this.w / 2, this.w / 2, this.depth + 1);
+
+            this.isLeaf = false; // Quadrant 0 is no longer a leaf node
+
+            // try stuff our boxes into our children if they can fit
+            var insertionCounter = 0;
+            var unfitList = new Array();
+            while (this.boxes.length > 0) {
+              var temp = this.boxes.pop();
+              
+              if (!this.q0.addPoint(temp)) {
+
+                if (!this.q1.addPoint(temp)) {
+
+                  if (!this.q2.addPoint(temp)) {
+
+                      if (!this.q3.addPoint(temp)) {
+
+                        unfitList.push(temp); // the box didn't fit into any quadrants
+
+                      } else {insertionCounter++}
+                  } else {insertionCounter++}
+                } else {insertionCounter++}
+              }else {insertionCounter++}
+            }
+
+            // These elements couldn't fit into children
+            // Keep them here for now
+            this.boxes = unfitList;
+
+            // Try insert the new box element into children
+            if (this.q0.addPoint(box)) {
+              return true;
+            }
+            if (this.q1.addPoint(box)) {
+              return true;
+            }
+            if (this.q2.addPoint(box)) {
+              return true;
+            }
+            if (this.q3.addPoint(box)) {
+              return true;
+            }
+            // New element couldn't fit in children
+            this.boxes.push(box);
+
+            //We could't fit anything in sub nodes so delete them
+            if (insertionCounter == 0) {
+              this.isLeaf = true; // We are now a leaf node again
+
+              this.q0 = null;
+              this.q1 = null;
+              this.q2 = null;
+              this.q3 = null;
+            }
+
+            return true;
+          }
+        } else { // This node is not a leaf and has children nodes so try insert new box element into them
+          if (this.q0.addPoint(box)) {
+            return true;
+          }
+          if (this.q1.addPoint(box)) {
+            return true;
+          }
+          if (this.q2.addPoint(box)) {
+            return true;
+          }
+          if (this.q3.addPoint(box)) {
+            return true;
+          }
+          // The new element couldn't fit in any children so keep it in this node
+          this.boxes.push(box);
+          return true;
+        }
+      };
+
+      //Draws the quadrants of the quadtree
+      this.drawQuads = function (){
+          if (this.selected) {
+            ctx.strokeStyle = "rgb(255,0,0)";
+            ctx.strokeRect(this.x, this.y,this.w,this.w);
+          } else {
+            ctx.strokeStyle = "rgb(0,0,0)";
+            ctx.strokeRect(this.x, this.y,this.w,this.w);
+          }
+          
+
+          if (this.q0 != null){
+            this.q0.drawQuads();
+          }
+          if (this.q1 != null ){
+            this.q1.drawQuads();
+          }
+          if (this.q2 != null){
+            this.q2.drawQuads();
+          }
+          if (this.q3 != null){
+            this.q3.drawQuads();
+          }
+
+      };
+
+      //Draws all boxes contained within the subtree
+      this.drawLeaves = function (){
+        for (var i = 0; i < this.boxes.length; i++) {
+            var p = this.boxes[i];
+            p.draw();
+        }
+
+        if (this.q0 != null) {
+          this.q0.drawLeaves();
+        }
+        if (this.q1 != null) {
+          this.q1.drawLeaves();
+        }
+        if (this.q2 != null) {
+          this.q2.drawLeaves();
+        }
+        if (this.q3 != null) {
+          this.q3.drawLeaves();
+        }
+      };
+
+      this.deselectLeaves = function (box){
+        this.selected = false;
+        if (this.q0 != null) {
+          this.q0.deselectLeaves();
+        }
+        if (this.q1 != null) {
+          this.q1.deselectLeaves();
+        }
+        if (this.q2 != null) {
+          this.q2.deselectLeaves();
+        }
+        if (this.q3 != null) {
+          this.q3.deselectLeaves();
+        }
+      };
+
+      this.selectLeaves = function (box){
+        
+        if(box.x + box.w < this.x || box.x > this.x + this.w) return false;
+        if(box.y + box.h < this.y || box.y > this.y + this.w) return false;
+        this.selected = true;
+
+        if (this.q0 != null) {
+          this.q0.selectLeaves(box);
+        }
+        if (this.q1 != null) {
+          this.q1.selectLeaves(box);
+        }
+        if (this.q2 != null) {
+          this.q2.selectLeaves(box);
+        }
+        if (this.q3 != null) {
+          this.q3.selectLeaves(box);
+        }
+
+      };
+
+      this.selectBoxes = function (box){
+
+        var result = new Array();
+        
+        if(box.x + box.w < this.x || box.x > this.x + this.w) return result;
+        if(box.y + box.h < this.y || box.y > this.y + this.w) return result;
+
+        if (this.boxes.length > 0) {
+          result = result.concat(this.boxes);
+        }
+        
+        if (this.q0 != null) {
+          result = result.concat(this.q0.selectBoxes(box));
+        }
+        if (this.q1 != null) {
+          result = result.concat(this.q1.selectBoxes(box));
+        }
+        if (this.q2 != null) {
+          result = result.concat(this.q2.selectBoxes(box));
+        }
+        if (this.q3 != null) {
+          result = result.concat(this.q3.selectBoxes(box));
+        }
+
+        return result;
+      };
+
+      this.printLeaves = function (){
+        for (var i = 0; i < this.boxes.length; i++) {
+            var p = this.boxes[i];
+            console.log("x: " + p.x + " y: " + p.y);
+        }
+
+        if (this.q0 != null) {
+          this.q0.printLeaves();
+        }
+        if (this.q1 != null) {
+          this.q1.printLeaves();
+        }
+        if (this.q2 != null) {
+          this.q2.printLeaves();
+        }
+        if (this.q3 != null) {
+          this.q3.printLeaves();
+        }
+      };
+
+      this.countElements = function (){
+        var count = this.boxes.length;
+
+        if (this.q0 != null) {
+          count += this.q0.countElements();
+        }
+        if (this.q1 != null) {
+          count += this.q1.countElements();
+        }
+        if (this.q2 != null) {
+          count += this.q2.countElements();
+        }
+        if (this.q3 != null) {
+          count += this.q3.countElements();
+        }
+        return count;
+      };
+
+    };
+
+    function Vec2 (x, y){
+      this.x = x;
+      this.y = y;
+
+      this.sub = function (v){
+        return new Vec2(this.x - v.x, this.y - v.y);
+      };
+
+      this.mul = function (f){
+        return new Vec2 (this.x * f, this.y * f);
+      };
+
+      this.mag = function (){
+        return Math.sqrt(this.x * this.x + this.y * this.y);
+      };
+
+      this.normalized = function (){
+        var len = Math.sqrt(this.x * this.x + this.y * this.y);
+        return new Vec2 (this.x / len, this.y / len);
+      };
+    };
+
+    function Box (x, y , w, h){
+      this.shape = "Rect";
+      this.x = x;
+      this.y = y;
+      this.w = w;
+      this.h = h;
+
+      this.mass = 1;
+      this.radius = 100;
+      
+      this.draw = function (){
+        ctx.strokeRect(this.x, this.y,this.w,this.h);
+      };
+
+    };
+
+    function AABBvsAABB(a,b )// AABB a, AABB b
+    {
+
+      if(a.x+a.w / 2 < b.x-b.w / 2 || a.x-a.w  / 2 > b.x+b.w  / 2) return false;
+      if(a.y+a.h / 2 < b.y-b.h / 2 || a.y-a.h  / 2 > b.y+b.h  / 2) return false;
+     
+      // No separating axis found, therefor there is at least one overlapping axis
+      return true;
+    }
+
+    setInterval(tick, 16);
+    var c = document.getElementById("Canvas");
+    var ctx = c.getContext("2d");
+
+    var quadTree = new QuadTree(0, 0, 600, 0);
+    var testBox = new Box(100, 100, 80, 80);
+
+    function tick() {
+
+    
+    testBox.x = mouseX;
+    testBox.y = mouseY;
+    quadTree.deselectLeaves();
+    quadTree.selectLeaves(testBox);
+
+    // all boxes in tree that could possibly collide with our testbox
+    var potentialCollisions = quadTree.selectBoxes(testBox);
+    
+    ctx.canvas.width  = window.innerWidth;
+    ctx.canvas.height = window.innerHeight;
+
+    ctx.fillStyle = "rgb(255,255,255)";
+
+    ctx.fillRect(0, 0, 300, 300);
+    ctx.fillStyle = "rgb(200,0,0)";
+
+    
+    quadTree.drawQuads();
+    ctx.strokeStyle = "rgb(0,0,0)";
+    quadTree.drawLeaves();
+
+    ctx.strokeStyle = "rgb(255,0,0)";
+
+    for (var i = 0; i < potentialCollisions.length; i++) {
+      //if (potentialCollisions[i] instanceof Box)
+        potentialCollisions[i].draw();
+    }
+
+
+    testBox.draw();
+
+    }
+
+c.addEventListener("mousedown", onMouseDown, false);
+
+function onMouseDown(event)
+{
+  var x = event.x;
+  var y = event.y;
+
+  x -= c.offsetLeft;
+  y -= c.offsetTop;
+
+
+  quadTree.addPoint(new Box(mouseX, mouseY, 40, 40));
+
+}
+
+c.addEventListener("mousemove", onMouseMove, false);
+function onMouseMove(event) {
+  mouseX = event.pageX;
+  mouseY = event.pageY;
+}
+
+    </script>
+  </body>
+</html>

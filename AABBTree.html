@@ -1,0 +1,648 @@
+<html>
+
+<head>
+</head>
+
+<body>
+
+	<canvas id="Canvas" width="300" height="300">
+	</canvas>
+
+	<style>
+		html,
+		body {
+			width: 100%;
+			height: 100%;
+			margin: 0px;
+		}
+	</style>
+	<script>
+		"use strict";
+
+		var mouseX = 0;
+		var mouseY = 0;
+
+		class PAABB {
+			constructor() {
+				this.min = {
+					x: 0,
+					y: 0
+				};
+				this.max = {
+					x: 0,
+					y: 0
+				};
+			}
+
+			Contains(other) {
+				if (this.max.x < b.min.x || other.min.x > b.max.x) return false;
+				if (this.max.y < b.min.y || other.min.y > b.max.y) return false;
+				return true;
+			}
+
+			SurfaceArea() {
+
+				let x = this.max.x - this.min.x;
+				let y = this.max.y - this.min.y;
+				return (x * y);
+
+			}
+
+		}
+
+		class Node {
+			constructor() {
+				this.aabb = null;
+				this.userData = null;
+
+				this.height = -1;
+
+				this.parent = -1;
+				this.next = -1;
+
+				this.left = -1;
+				this.right = -1;
+			}
+
+			IsLeaf() {
+				return this.right == -1;
+			}
+
+		}
+
+		function PMin(a, b) {
+			return {
+				x: Math.min(a.x, b.x),
+				y: Math.min(a.y, b.y)
+			};
+		}
+
+		function PMax(a, b) {
+			return {
+				x: Math.max(a.x, b.x),
+				y: Math.max(a.y, b.y)
+			};
+		}
+
+		function PCombine(a, b) {
+			c = new PAABB();
+			c.min = PMin(a.min, b.min); //vec2
+			c.max = PMax(a.max, b.max); //vec2
+			return c;
+		}
+
+		class AABBTree {
+
+			constructor(x, y, w, depth, parent) {
+				this.m_root = -1;
+				
+				this.m_count = 0; // Number of active nodes
+				this.m_capacity = 4; // Max capacity of nodes
+				this.m_freeList = 0;
+
+				this.m_nodes = new Array(1024);
+				for (let i = 0; i < this.m_capacity; ++i)
+				{
+					this.m_nodes[i] = new Node();
+				}
+
+
+				this.currIndex = 0;
+
+				this.AddToFreeList( 0 );
+			}
+			
+
+			Insert(aabb, userData) {
+				let id = this.AllocateNode();
+				this.m_nodes[id].aabb = aabb;
+
+				this.FattenAABB(this.m_nodes[id].aabb);
+
+				this.m_nodes[id].userData = userData;
+				this.m_nodes[id].height = 0;
+
+				this.InsertLeaf(id);
+			}
+
+			FattenAABB(aabb) {
+				let k_fattener = 0.5;
+
+				aabb.min.x -= k_fattener;
+				aabb.min.y -= k_fattener;
+
+				aabb.max.x += k_fattener;
+				aabb.max.y += k_fattener;
+
+			}
+
+			InsertLeaf(id) {
+
+				if (this.m_root == -1) {
+					this.m_root = id;
+					this.m_nodes[this.m_root].parent = -1;
+				}
+
+				let searchIndex = this.m_root;
+				let leafAABB = this.m_nodes[id].aabb;
+				while (!this.m_nodes[searchIndex].IsLeaf()) {
+					// Cost for insertion at index (branch node), involves creation
+					// of new branch to contain this index and the new leaf
+
+					let combined = PCombine(leafAABB, this.m_nodes[searchIndex].aabb);
+					console.log(combined);
+					let combinedArea = combined.SurfaceArea();
+					let branchCost = 2.0 * combinedArea;
+
+					// Inherited cost (surface area growth from heirarchy update after descent)
+					let inheritedCost = 2.0 * (combinedArea - this.m_nodes[searchIndex].aabb.SurfaceArea());
+
+					let left = this.m_nodes[searchIndex].left;
+					let right = this.m_nodes[searchIndex].right;
+
+					// Calculate costs for left/right descents. If traversal is to a leaf,
+					// then the cost of the combind AABB represents a new branch node. Otherwise
+					// the cost is only the inflation of the pre-existing branch.
+					let leftDescentCost;
+					let inflated;
+					let branchArea;
+					if (this.m_nodes[left].IsLeaf())
+						leftDescentCost = PCombine(leafAABB, this.m_nodes[left].aabb).SurfaceArea() + inheritedCost;
+					else {
+						inflated = PCombine(leafAABB, this.m_nodes[left].aabb).SurfaceArea();
+						branchArea = this.m_nodes[left].aabb.SurfaceArea();
+						leftDescentCost = inflated - branchArea + inheritedCost;
+					}
+
+					// Cost for right descent
+					let rightDescentCost;
+					if (this.m_nodes[right].IsLeaf())
+						rightDescentCost = PCombine(leafAABB, this.m_nodes[right].aabb).SurfaceArea() + inheritedCost;
+					else {
+						inflated = PCombine(leafAABB, this.m_nodes[right].aabb).SurfaceArea();
+						branchArea = this.m_nodes[right].aabb.SurfaceArea();
+						rightDescentCost = inflated - branchArea + inheritedCost;
+					}
+
+					// Determine traversal direction, or early out on a branch index
+					if (branchCost < leftDescentCost && branchCost < rightDescentCost)
+						break;
+
+					if (leftDescentCost < rightDescentCost)
+						searchIndex = left;
+
+					else
+						searchIndex = right;
+
+				}
+				let sibling = searchIndex;
+
+				// Create new parent
+				let oldParent = this.m_nodes[sibling].parent;
+				let newParent = this.AllocateNode();
+				this.m_nodes[newParent].parent = oldParent;
+				this.m_nodes[newParent].userData = null;
+				this.m_nodes[newParent].aabb = PCombine(leafAABB, this.m_nodes[sibling].aabb);
+				this.m_nodes[newParent].height = this.m_nodes[sibling].height + 1;
+
+				// Sibling was root
+				if (oldParent == -1) {
+					this.m_nodes[newParent].left = sibling;
+					this.m_nodes[newParent].right = id;
+					this.m_nodes[sibling].parent = newParent;
+					this.m_nodes[id].parent = newParent;
+					this.m_root = newParent;
+				} else {
+					if (this.m_nodes[oldParent].left == sibling)
+						this.m_nodes[oldParent].left = newParent;
+
+					else
+						this.m_nodes[oldParent].right = newParent;
+
+					this.m_nodes[newParent].left = sibling;
+					this.m_nodes[newParent].right = id;
+					this.m_nodes[sibling].parent = newParent;
+					this.m_nodes[id].parent = newParent;
+				}
+
+
+				this.SyncHeirarchy(this.m_nodes[id].parent);
+			}
+
+			SyncHeirarchy (index) {
+				while (index != -1) {
+					index = this.Balance(index);
+
+					let left = this.m_nodes[index].left;
+					let right = this.m_nodes[index].right;
+
+					this.m_nodes[index].height = 1 + Math.max(this.m_nodes[left].height, this.m_nodes[right].height);
+					this.m_nodes[index].aabb = PCombine(this.m_nodes[left].aabb, this.m_nodes[right].aabb);
+
+					index = this.m_nodes[index].parent;
+				}
+
+			}
+
+			RemoveLeaf( id )
+			{
+				if ( id == this.m_root )
+				{
+					this.m_root = -1;
+					return;
+				}
+
+				// Setup parent, grandParent and sibling
+				let parent = this.m_nodes[ id ].parent;
+				let grandParent = this.m_nodes[parent].parent;
+				let sibling;
+
+				if ( this.m_nodes[ parent ].left == id )
+					sibling = this.m_nodes[ parent ].right;
+
+				else
+					sibling = this.m_nodes[ parent ].left;
+
+				// Remove parent and replace with sibling
+				if ( grandParent != -1)
+				{
+					// Connect grandParent to sibling
+					if ( this.m_nodes[ grandParent ].left == parent )
+					this.m_nodes[ grandParent ].left = sibling;
+
+					else
+						this.m_nodes[ grandParent ].right = sibling;
+
+					// Connect sibling to grandParent
+					this.m_nodes[ sibling ].parent = grandParent;
+				}
+
+				// Parent was root
+				else
+				{
+					this.m_root = sibling;
+					this.m_nodes[ sibling ].parent = -1;
+				}
+
+				this.DeallocateNode( parent );
+				this.SyncHeirarchy( grandParent );
+			}
+
+			
+
+			AllocateNode() {
+				if (this.m_freeList == -1) {
+					let oldCap = this.m_capacity;
+					this.m_capacity *= 2;
+					this.m_nodes.length = this.m_capacity;
+
+					for (let i = oldCap; i < this.m_capacity; ++i)
+					{
+						this.m_nodes[i] = new Node();
+					}
+
+					this.AddToFreeList(this.m_count);
+				}
+
+				
+				let freeNode = this.m_freeList;
+				this.m_freeList = this.m_nodes[this.m_freeList].next;
+				this.m_nodes[ freeNode ].height = 0;
+				this.m_nodes[ freeNode ].left = -1;
+				this.m_nodes[ freeNode ].right = -1;
+				this.m_nodes[ freeNode ].parent = -1;
+				this.m_nodes[ freeNode ].userData = null;
+				++this.m_count;
+				return freeNode;
+
+			}
+
+			AddToFreeList(index)
+			{
+				for (let i = index; i < this.m_capacity - 1; ++i)
+				{
+					this.m_nodes[i].next = i + 1;
+					this.m_nodes[i].height = -1;
+				}
+				this.m_nodes[this.m_capacity - 1].next = -1;
+				this.m_nodes[this.m_capacity - 1].height = -1;
+				this.m_freeList = index;
+			}
+
+			DeallocateNode(index)
+			{
+
+				this.m_nodes[index].next = m_freeList;
+				this.m_nodes[index].height = -1;
+				this.m_freeList = index;
+
+				--this.m_count;
+			}
+
+			Balance(iA) {
+				let A = this.m_nodes[iA];
+
+				if (A.IsLeaf() || A.height == 1)
+					return iA;
+
+				/*      A
+				      /   \
+				     B     C
+				    / \   / \
+				   D   E F   G
+				*/
+
+				let iB = A.left;
+				let iC = A.right;
+				let B = this.m_nodes[iB];
+				let C = this.m_nodes[iC];
+
+				let balance = C.height - B.height;
+
+				// C is higher, promote C
+				if (balance > 1) {
+					let iF = C.left;
+					let iG = C.right;
+					let F = this.m_nodes[iF];
+					let G = this.m_nodes[iG];
+
+					// grandParent point to C
+					if (A.parent != -1) {
+						if (this.m_nodes[A.parent].left == iA)
+							this.m_nodes[A.parent].left = iC;
+
+						else
+							this.m_nodes[A.parent].right = iC;
+					} else
+						this.m_root = iC;
+
+					// Swap A and C
+					C.left = iA;
+					C.parent = A.parent;
+					A.parent = iC;
+
+					// Finish rotation
+					if (F.height > G.height) {
+						C.right = iF;
+						A.right = iG;
+						G.parent = iA;
+						A.aabb = PCombine(B.aabb, G.aabb);
+						C.aabb = PCombine(A.aabb, F.aabb);
+
+						A.height = 1 + Math.max(B.height, G.height);
+						C.height = 1 + Math.max(A.height, F.height);
+					} else {
+						C.right = iG;
+						A.right = iF;
+						F.parent = iA;
+						A.aabb = PCombine(B.aabb, F.aabb);
+						C.aabb = PCombine(A.aabb, G.aabb);
+
+						A.height = 1 + Math.max(B.height, F.height);
+						C.height = 1 + Math.max(A.height, G.height);
+					}
+
+					return iC;
+				}
+
+				// B is higher, promote B
+				else if (balance < -1) {
+					let iD = B.left;
+					let iE = B.right;
+					let D = this.m_nodes[iD];
+					let E = this.m_nodes[iE];
+
+					// grandParent point to B
+					if (A.parent != -1) {
+						if (this.m_nodes[A.parent].left == iA)
+							this.m_nodes[A.parent].left = iB;
+						else
+							this.m_nodes[A.parent].right = iB;
+					} else
+						this.m_root = iB;
+
+					// Swap A and B
+					B.right = iA;
+					B.parent = A.parent;
+					A.parent = iB;
+
+					// Finish rotation
+					if (D.height > E.height) {
+						B.left = iD;
+						A.left = iE;
+						E.parent = iA;
+						A.aabb = PCombine(C.aabb, E.aabb);
+						B.aabb = PCombine(A.aabb, D.aabb);
+
+						A.height = 1 + Math.max(C.height, E.height);
+						B.height = 1 + Math.max(A.height, D.height);
+					} else {
+						B.left = iE;
+						A.left = iD;
+						D.parent = iA;
+						A.aabb = PCombine(C.aabb, D.aabb);
+						B.aabb = PCombine(A.aabb, E.aabb);
+
+						A.height = 1 + Math.max(C.height, D.height);
+						B.height = 1 + Math.max(A.height, E.height);
+					}
+
+					return iB;
+				}
+
+				return iA;
+			}
+
+			// Returns list of aabbs that...
+			// are branches and are colliding with box
+			// and leaf boxes that are potentially colliding with box 
+			selectBranches(box) {
+
+				var result = new Array();
+
+				if (this.m_root == -1) {
+					return result;
+				}
+				result = result.concat(this.selectBranchNodes(this.m_root, box));
+				return result;
+			};
+
+			
+			selectBranchNodes(index, box) {
+				let n = this.m_nodes[index];
+				let b = n.aabb;
+
+				var result = new Array();
+
+				if (box.max.x < b.min.x || box.min.x > b.max.x) return result;
+				if (box.max.y < b.min.y || box.min.y > b.max.y) return result;
+
+				
+				// It must be a branch
+				if (!n.IsLeaf()) {
+					result.push(b); //Add box containing other boxes
+
+					// Add leaf boxes if they are in the node below us
+					let n1 = this.m_nodes[n.left];
+					let b1 = n1.aabb;
+					if (n1.IsLeaf()) {
+						result.push(b1);
+					}
+
+					let n2 = this.m_nodes[n.right];
+					let b2 = n2.aabb;
+					if (n2.IsLeaf()) {
+						result.push(b2);
+					}
+
+					result = result.concat(this.selectBranchNodes(n.left, box));
+					result = result.concat(this.selectBranchNodes(n.right, box));
+				}
+
+				return result;
+			};
+
+			// Select leaf aabbs that are colliding with box
+			selectLeafs(box) {
+
+				var result = new Array();
+
+				if (this.m_root == -1) {
+					return result;
+				}
+				result = result.concat(this.selectLeafNodes(this.m_root, box));
+				return result;
+			};
+
+			selectLeafNodes(index, box) {
+				let n = this.m_nodes[index];
+				let b = n.aabb;
+
+				var result = new Array();
+
+				if (box.max.x < b.min.x || box.min.x > b.max.x) return result;
+				if (box.max.y < b.min.y || box.min.y > b.max.y) return result;
+
+				if (!n.IsLeaf()) {
+					result = result.concat(this.selectLeafNodes(n.left, box));
+					result = result.concat(this.selectLeafNodes(n.right, box));
+				} else {
+					result.push(b);
+				}
+
+				return result;
+			};
+
+			//Draws all boxes contained within the tree
+			render(){
+				if (this.m_root != -1) {
+					this.renderNode(this.m_root);
+				}
+
+			};
+
+			renderNode (index) {
+				let n = this.m_nodes[index];
+				let b = n.aabb;
+
+				ctx.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y);
+
+				if (!n.IsLeaf()) {
+					this.renderNode(n.left);
+					this.renderNode(n.right);
+				}
+
+			};
+
+			//TODO
+			count() {
+				
+			}
+
+			countNode(index) {
+				
+			}
+
+		};
+
+		setInterval(tick, 16);
+		var c = document.getElementById("Canvas");
+		var ctx = c.getContext("2d");
+
+		var quadTree = new AABBTree(0, 0, 600, 0, null);
+		var insCounter = 0; // record how many boxes inserted into tree
+
+		function tick() {
+
+			// all boxes in tree that could possibly collide with our testbox
+			let b = new PAABB();
+			b.min = {
+				x: mouseX,
+				y: mouseY
+			};
+			b.max = {
+				x: mouseX + 40,
+				y: mouseY + 40
+			};
+			let potentialCollisions = quadTree.selectBranches(b);
+
+			ctx.canvas.width = window.innerWidth;
+			ctx.canvas.height = window.innerHeight;
+
+			quadTree.render();
+
+			ctx.strokeStyle = "rgb(255,0,0)";
+
+			for (let i = 0; i < potentialCollisions.length; i++) {
+				let box = potentialCollisions[i];
+				ctx.strokeRect(box.min.x, box.min.y, box.max.x - box.min.x, box.max.y - box.min.y);
+			}
+
+			ctx.strokeStyle = "rgb(0,0,255)";
+			ctx.strokeRect(b.min.x, b.min.y, b.max.x - b.min.x, b.max.y - b.min.y);
+		}
+
+		c.addEventListener("mousedown", onMouseDown, false);
+
+		function onMouseDown(event) {
+			var x = event.x;
+			var y = event.y;
+
+			x -= c.offsetLeft;
+			y -= c.offsetTop;
+
+			let aabb = new PAABB();
+			aabb.min = {
+				x: mouseX,
+				y: mouseY
+			};
+			aabb.max = {
+				x: mouseX + 40,
+				y: mouseY + 40
+			};
+
+
+			if (event.which == 1) {
+				quadTree.Insert(aabb, "test" + insCounter);
+				insCounter++;
+			} else {
+				//quadTree.Remove(aabb, "test" + insCounter);
+			}
+			
+
+			ctx.fillStyle = "rgb(200,0,0)";
+
+			quadTree.render();
+
+		}
+
+		c.addEventListener("mousemove", onMouseMove, false);
+
+		function onMouseMove(event) {
+			mouseX = event.pageX;
+			mouseY = event.pageY;
+		}
+	</script>
+</body>
+
+</html>
