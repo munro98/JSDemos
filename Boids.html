@@ -24,11 +24,9 @@
       }
 
       addEntity(entity) {
-        //console.log("e.x" + entity.pos.x);
 
         // The entity isn't completely contained in our box
-        if (entity.pos.x < this.x || entity.pos.x + entity.width > this.x + this.w || entity.pos.y < this.y || entity
-          .pos.y + entity.height > this.y + this.w) {
+        if (entity.x < this.x || entity.x > this.x + this.w || entity.y < this.y || entity.y > this.y + this.w) {
           //console.log("not fit ")
           return false;
         }
@@ -43,7 +41,7 @@
 
           // If we can subdivide then subdivide
           //                   MaxElements      MaxDepth    
-          if (this.points.length >= 1 && this.depth < 32) { //
+          if (this.points.length >= 1 && this.depth < 16) { //
 
             this.q0 = new QuadTree(this.x, this.y, this.w / 2, this.depth + 1);
             this.q1 = new QuadTree(this.x + this.w / 2, this.y, this.w / 2, this.depth + 1);
@@ -115,7 +113,6 @@
             return true;
           }
         } else { // This node has children nodes so try insert new element into them
-          //console.log("TEST");
           if (this.q0.addEntity(entity)) {
             return true;
           }
@@ -135,7 +132,7 @@
       }
 
       //Draws the quadrants of the quadtree
-      drawQuads(cameraPosition) {
+      drawQuads(cameraPosition, ctx) {
         ctx.save();
         ctx.translate(cameraPosition.x, cameraPosition.y);
         if (this.selected) {
@@ -148,16 +145,16 @@
         ctx.restore();
 
         if (this.q0 != null) {
-          this.q0.drawQuads(cameraPosition);
+          this.q0.drawQuads(cameraPosition, ctx);
         }
         if (this.q1 != null) {
-          this.q1.drawQuads(cameraPosition);
+          this.q1.drawQuads(cameraPosition, ctx);
         }
         if (this.q2 != null) {
-          this.q2.drawQuads(cameraPosition);
+          this.q2.drawQuads(cameraPosition, ctx);
         }
         if (this.q3 != null) {
-          this.q3.drawQuads(cameraPosition);
+          this.q3.drawQuads(cameraPosition, ctx);
         }
 
       }
@@ -204,8 +201,8 @@
 
       selectLeaves(entity) {
 
-        if (entity.pos.x + entity.width < this.x || entity.pos.x > this.x + this.w) return false;
-        if (entity.pos.y + entity.height < this.y || entity.pos.y > this.y + this.w) return false;
+        if (entity.x < this.x || entity.x > this.x + this.w) return false;
+        if (entity.y < this.y || entity.y > this.y + this.w) return false;
         //console.log("selected");
         this.selected = true;
 
@@ -227,8 +224,8 @@
       selectBoxes(entity) {
         var result = new Array();
 
-        if (entity.pos.x + entity.width < this.x || entity.pos.x > this.x + this.w) return result;
-        if (entity.pos.y + entity.height < this.y || entity.pos.y > this.y + this.w) return result;
+        if (entity.x + entity.width < this.x || entity.x > this.x + this.w) return result;
+        if (entity.y + entity.height < this.y || entity.y > this.y + this.w) return result;
 
         if (this.points.length > 0) {
           result = result.concat(this.points);
@@ -236,7 +233,6 @@
 
         if (this.q0 != null) {
           result = result.concat(this.q0.selectBoxes(entity));
-          //result = result.concat(this.q0.points);
         }
         if (this.q1 != null) {
           result = result.concat(this.q1.selectBoxes(entity));
@@ -251,52 +247,6 @@
         return result;
       }
 
-
-      selectPoints(entity) {
-
-        var result = new Array();
-
-        if (entity.x < this.x || entity.x > this.x + this.w) return result;
-        if (entity.y < this.y || entity.y > this.y + this.w) return result;
-
-        if (this.points.length > 0) {
-          result = result.concat(this.points);
-        }
-
-        if (this.q0 != null) {
-          result = result.concat(this.q0.selectPoints(entity));
-        }
-        if (this.q1 != null) {
-          result = result.concat(this.q1.selectPoints(entity));
-        }
-        if (this.q2 != null) {
-          result = result.concat(this.q2.selectPoints(entity));
-        }
-        if (this.q3 != null) {
-          result = result.concat(this.q3.selectPoints(entity));
-        }
-
-        return result;
-      }
-
-      countElements() {
-        var count = this.points.length;
-
-        if (this.q0 != null) {
-          count += this.q0.countElements();
-        }
-        if (this.q1 != null) {
-          count += this.q1.countElements();
-        }
-        if (this.q2 != null) {
-          count += this.q2.countElements();
-        }
-        if (this.q3 != null) {
-          count += this.q3.countElements();
-        }
-        return count;
-      }
-
     }
 
     class Boid {
@@ -308,7 +258,7 @@
 
       draw(ctx) {
         let pointLen = Boid.radius * 2.5;
-        ctx.fillStyle = 'blue';
+        
         ctx.beginPath();
         ctx.arc(this.x, this.y, Boid.radius, 0, 2 * Math.PI);
         ctx.fill();
@@ -333,8 +283,12 @@
       }
 
       getNeighbors(swarm) {
+
         let w = swarm.width,
           h = swarm.height;
+
+        /*
+        
         let neighbors = [];
         for (let i = 0; i < swarm.boids.length; i++) {
           let boid = swarm.boids[i];
@@ -342,6 +296,26 @@
             neighbors.push(boid);
           }
         }
+        return neighbors;
+        */
+        
+        let box = {x : this.x - Boid.vision2 / 2, y : this.y - Boid.vision2 / 2, width : Boid.vision2, height: Boid.vision2}
+        //swarm.ctx.strokeRect(this.x- Boid.vision2 / 2, this.y- Boid.vision2 / 2, Boid.vision2, Boid.vision2);
+
+        let result = swarm.qt.selectBoxes(box);
+        //let result = swarm.qt.selectPoints(this);
+        //console.log(result.length);
+        //return result;
+        
+        let neighbors = [];
+        for (let i = 0; i < result.length; i++) {
+          let boid = result[i];
+          if (this !== boid && this.distance(boid, w, h) < Boid.vision / 2) {
+            neighbors.push(boid);
+          }
+        }
+        //*/
+
         return neighbors;
       }
 
@@ -388,6 +362,8 @@
             min = null;
           for (let i = 0; i < neighbors.length; i++) {
             let boid = neighbors[i];
+            //if (boid == this)
+            //  continue;
             meanhx += Math.cos(boid.heading);
             meanhy += Math.sin(boid.heading);
             meanx += boid.x;
@@ -436,11 +412,14 @@
     Boid.speed = 2;
     Boid.radialSpeed = Math.PI / 60;
     Boid.vision = 50;
+    Boid.vision2 = Boid.vision * 1.4;
 
     class Swarm {
       constructor() {
         this.canvas = document.getElementById('canvas');
         this.ctx = canvas.getContext('2d');
+
+        
 
         this.boids = [];
         let swarm = this;
@@ -448,6 +427,8 @@
 
         this.width = this.canvas.width;
         this.height = this.canvas.height;
+
+        this.qt = new QuadTree(0, 0, Math.max(this.width, this.height), 0);
       }
 
       createBoid(n) {
@@ -461,9 +442,6 @@
       }
 
       update() {
-
-        console.log("up" + this.boids.length);
-
         if (canvas.width != window.innerWidth)
           canvas.width = window.innerWidth;
         if (canvas.height != window.innerHeight)
@@ -477,10 +455,21 @@
         this.ctx.fillStyle = 'white';
         this.ctx.fillRect(0, 0, canvas.width, canvas.height);
 
+
+        this.qt = new QuadTree(0, 0, Math.max(this.width, this.height), 0);
+
+
+        for (let i = 0; i < this.boids.length; i++) {
+          this.qt.addEntity(this.boids[i]);
+        }
+
         for (let i = 0; i < this.boids.length; i++) {
           this.boids[i].update(this);
         }
 
+        this.qt.drawQuads({x:0, y:0}, this.ctx);
+
+        this.ctx.fillStyle = 'blue';
         for (let i = 0; i < this.boids.length; i++) {
           this.boids[i].draw(this.ctx);
         }
@@ -501,7 +490,8 @@
 
       swarm = new Swarm();
       swarm.id = setInterval(update, 33);
-      swarm.createBoid(100);
+      swarm.createBoid(1000);
+      //swarm.createBoid(1000);
     };
   </script>
 </head>
