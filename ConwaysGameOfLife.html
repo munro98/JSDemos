@@ -5,6 +5,7 @@
   </head>
   <body>
 <div id="buttons">
+<button onclick="location.reload();"> Refresh</button>
 </div>
 
   <canvas id="Canvas" 
@@ -81,20 +82,13 @@
         
     }
 
-
-
     for (var i = 0; i < cells.length; i++) {
         for (var j = 0; j < width; j++) {
         if (cells[i][j]) {
             ctx.fillRect(cameraX + i*zoom, cameraY+j*zoom,zoom,zoom);
           } 
-          //else {
-            //ctx.strokeRect(cameraX + i*zoom, cameraY+generation*zoom,zoom,zoom);
-          //}
         }
       }
-
-    //cells[cells.length/2] = true;
 
     function tick() {
       ctx.canvas.width  = window.innerWidth;
@@ -105,9 +99,6 @@
         if (cells[i][j]) {
             ctx.fillRect(cameraX + i*zoom, cameraY+j*zoom,zoom,zoom);
           } 
-          //else {
-            //ctx.strokeRect(cameraX + i*zoom, cameraY+generation*zoom,zoom,zoom);
-          //}
         }
       }
       var cells2 = new Array();
@@ -192,44 +183,14 @@ function onMouseUp(event)
   mouseDown = false;
   //console.log("Up");
   if (event.which == 1) {
-  
   }
   
-
 }
 
-(function() {
-    document.onmousemove = handleMouseMove;
-    function handleMouseMove(event) {
-        var dot, eventDoc, doc, body, pageX, pageY;
-
-        event = event || window.event; // IE-ism
-
-        // If pageX/Y aren't available and clientX/Y are,
-        // calculate pageX/Y - logic taken from jQuery.
-        // (This is to support old IE)
-        if (event.pageX == null && event.clientX != null) {
-            eventDoc = (event.target && event.target.ownerDocument) || document;
-            doc = eventDoc.documentElement;
-            body = eventDoc.body;
-
-            event.pageX = event.clientX +
-              (doc && doc.scrollLeft || body && body.scrollLeft || 0) -
-              (doc && doc.clientLeft || body && body.clientLeft || 0);
-            event.pageY = event.clientY +
-              (doc && doc.scrollTop  || body && body.scrollTop  || 0) -
-              (doc && doc.clientTop  || body && body.clientTop  || 0 );
-        }
-        if (event.which == 1) {
-          cameraX -= mouseX - event.pageX;
-          cameraY -= mouseY - event.pageY;
-        }
-        // Use event.pageX / event.pageY here
+    document.onmousemove = function() {
         mouseX = event.pageX;
         mouseY = event.pageY;
     }
-})();
-
     </script>
   </body>
 </html>
